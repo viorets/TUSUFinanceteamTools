@@ -96,7 +96,7 @@ export function uiCss(t) {
     '--accent': c(ha, sa, 50), '--tint': c(h, s * 0.6, 92), '--border': c(h, s * 0.3, 86), '--border-strong': c(h, s * 0.5, 62),
     '--primary-fill': `linear-gradient(100deg, ${c(h, s, 26)}, ${c(ha, sa, 28)})`, '--primary-glow': c(h, s, 30, 0.32),
     '--title-grad': `linear-gradient(90deg, ${c(h, s, 26)}, ${c(ha, sa, 40)})`,
-    '--md-head': c(h, s, 24), '--md-rule': c(h, s, 38), '--md-th': c(h, s, 30), '--md-link': c(h, s, 28), '--logo-fill': `linear-gradient(140deg, ${c(h, s, 26)}, ${c(ha, sa, 55)})`, '--logo-glow': c(h, s, 26, 0.25),
+    '--md-head': c(h, s, 24), '--md-rule': c(h, s, 38), '--md-th': c(h, s, 30), '--md-link': c(h, s, 28),
     '--glass-tint': `linear-gradient(135deg, rgba(255, 255, 255, .74), ${c(h, s * 0.5, 92, 0.58)})`, '--glass-solid': c(h, s * 0.4, 97),
     '--backdrop': `radial-gradient(42vmax 42vmax at 8% 6%, ${c(h, s, 40, 0.22)}, transparent 70%), radial-gradient(38vmax 38vmax at 92% 42%, ${c(ha, sa, 50, 0.22)}, transparent 70%), radial-gradient(46vmax 36vmax at 40% 108%, ${c(h, s, 25, 0.14)}, transparent 70%), linear-gradient(160deg, ${c(h, s * 0.4, 97)}, ${c(h, s * 0.4, 92)} 45%, ${c(h, s * 0.5, 84)})`,
   };
@@ -106,7 +106,7 @@ export function uiCss(t) {
     '--accent': c(ha, sa, 62), '--tint': c(ha, sa, 62, 0.12), '--border': c(h, s * 0.5, 75, 0.14), '--border-strong': c(h, s * 0.4, 25),
     '--primary-fill': `linear-gradient(100deg, ${c(h, s, 26)}, ${c(ha, sa, 28)})`, '--primary-glow': c(h, s, 40, 0.32),
     '--title-grad': `linear-gradient(90deg, ${c(ha, sa, 62)}, ${c(ha, sa * 0.8, 82)})`,
-    '--md-head': c(ha, sa * 0.9, 75), '--md-rule': c(ha, sa, 50), '--md-th': c(h, s, 30), '--md-link': c(ha, sa * 0.9, 72), '--logo-fill': `linear-gradient(140deg, ${c(h, s, 26)}, ${c(ha, sa, 55)})`, '--logo-glow': c(h, s, 20, 0.35),
+    '--md-head': c(ha, sa * 0.9, 75), '--md-rule': c(ha, sa, 50), '--md-th': c(h, s, 30), '--md-link': c(ha, sa * 0.9, 72),
     '--glass-tint': `linear-gradient(135deg, ${c(h, s * 0.25, 12, 0.72)}, ${c(h, s * 0.25, 9, 0.64)})`, '--glass-solid': c(h, s * 0.25, 12),
     '--glass-bar-tint': `linear-gradient(135deg, ${c(h, s * 0.25, 9, 0.94)}, ${c(h, s * 0.25, 9, 0.9)})`, '--glass-border': c(h, s * 0.5, 75, 0.14),
     '--backdrop': `radial-gradient(45vmax 40vmax at 8% 8%, ${c(h, s, 45, 0.11)}, transparent 70%), radial-gradient(40vmax 35vmax at 92% 12%, ${c(ha, sa, 55, 0.07)}, transparent 70%), radial-gradient(45vmax 45vmax at 85% 92%, ${c(h, s, 35, 0.12)}, transparent 70%), linear-gradient(180deg, ${c(h, s * 0.5, 8)}, ${c(h, s * 0.5, 6)})`,
@@ -126,7 +126,7 @@ export function applySiteWide(t = currentTheme()) {
 
 // The site icon in the browser tab takes the theme too: every pixel of the CI paper plane gets the key colour's hue and
 // saturation and keeps its own lightness (a grey palette gives a grey plane). The PNG is kept so a one-line script in
-// index.html's <head> shows it before the page draws; the logo square in the top bar uses --logo-fill.
+// index.html's <head> shows it before the page draws. The logo beside the site name (img.brand-icon) takes it too.
 const ICON = 'favicon.png?v=2'; const ICON_KEY = 'site-ui-icon';
 let iconRun = 0;
 async function themeIcon(t) {
@@ -149,6 +149,7 @@ async function themeIcon(t) {
   }
   if (run !== iconRun) return;
   document.querySelectorAll('link[rel="icon"]').forEach((l) => { l.href = url || ICON; });
+  document.querySelectorAll('img.brand-icon').forEach((im) => { im.src = url || ICON; });
   write(ICON_KEY, url);
 }
 export function setSiteWide(on) { write(UI_KEY, on ? '1' : null); applySiteWide(); }
