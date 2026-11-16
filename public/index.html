@@ -1300,15 +1300,19 @@
         const range = (ns) => ns.reduce((out, n) => { const r = out.at(-1); if (r && n === r[1] + 1) r[1] = n; else out.push([n, n]); return out; }, []).map(([a, b]) => (a === b ? a : `${a}–${b}`)).join(', ');
         async function pdfText(fmt) {
             const base = fileName.replace(/\.pdf$/i, '');
-            // Scanned pages and pages with damaged Thai are read by OCR (models load the first time, about 4 MB).
+            // Pages with damaged Thai are first read with the exact text the PDF keeps for it (ActualText, read with
+            // pdf-lib, which the editor has loaded); scanned pages and pages still damaged are read by OCR (models load
+            // the first time, about 4 MB).
             let ocrFixed = 0; const ocrCheck = [];
             const r = await pdfToBlocks(editor.doc, {
+                PDFLib: window.PDFLib,
                 onPage: (n, all) => status(`Reading the text of page ${n} of ${all}…`),
                 ocr: async (page) => { const it = await ocrPage(page, status); ocrFixed += it.fixed || 0; (it.check || []).forEach(([w, s]) => ocrCheck.push(`${w}${s ? ` (${s}?)` : ''} p.${page.pageNumber}`)); return it; },
                 onOcr: (k, all, n) => status(`Reading page ${n} with OCR (${k} of ${all})…`),
             });
             const text = blocksToMd(r.blocks);
             const notes = [];
+            if (r.repaired.length) notes.push(`Thai on page${r.repaired.length > 1 ? 's' : ''} ${range(r.repaired)} put right from the text the PDF keeps for it (exact, not OCR)`);
             if (r.ocred.length) notes.push(`page${r.ocred.length > 1 ? 's' : ''} ${range(r.ocred)} ${r.ocred.length > 1 ? 'were' : 'was'} read by OCR (${r.scanned.length ? 'scanned' : ''}${r.scanned.length && r.damaged.length ? ' or ' : ''}${r.damaged.length ? 'Thai text in the PDF damaged' : ''}): check names and figures there`);
             if (ocrFixed) notes.push(`OCR words put right from the Thai word list: ${ocrFixed}`);
             if (ocrCheck.length) notes.push(`OCR words to check: ${ocrCheck.slice(0, 8).join(', ')}${ocrCheck.length > 8 ? ` and ${ocrCheck.length - 8} more` : ''}`);

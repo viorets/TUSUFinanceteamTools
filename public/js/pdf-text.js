@@ -53,7 +53,8 @@ const LIST = /^\s*(?:([•●▪■◦○◆❖➢➤►✓✔\-–—*·])|(\d{
 // items: text items from OCR (js/pdf-ocr.js) instead of the page's own text.
 async function pageLines(page, items = null, { findGrids = true } = {}) {
   const ops = await page.getOperatorList(); // also loads the fonts, so their names (Bold, Italic) can be read
-  const tc = items ? { items, styles: {} } : await page.getTextContent();
+  // items: OCR items (an array), or a whole text content { items, styles } (actualTextContent)
+  const tc = items ? (Array.isArray(items) ? { items, styles: {} } : items) : await page.getTextContent();
   // A font that writes ำ where า belongs (TH Sarabun bold in Word's PDF export: "กิจกำร"): it has many ำ and no า.
   const amaa = {};
   tc.items.forEach((it) => { const c = (amaa[it.fontName] ||= [0, 0]); c[0] += (it.str?.match(/ำ/g) || []).length; c[1] += (it.str?.match(/า/g) || []).length; });
@@ -321,15 +322,113 @@ export async function madeByCanva(doc) {
   try { const { info } = await doc.getMetadata(); return /canva/i.test(`${info?.Producer || ''} ${info?.Creator || ''}`); } catch { return false; }
 }
 
-export async function pdfToBlocks(doc, { onPage = () => {}, ocr = null, onOcr = () => {} } = {}) {
+// Thai that the PDF keeps only as /ActualText. Chrome and Edge ("Skia/PDF": printed pages, the Markdown editor's
+// PDF) and Canva draw Thai marks with shaped glyphs that map to no text, and wrap each such cluster in
+// `/Span <</ActualText <FEFF…>>> BDC … EMC` holding the real text ("ที่", "ฝ่"). pdf.js reports where each span starts
+// and ends (getTextContent includeMarkedContent: tag 'Span', id null) but drops the ActualText value, so the values
+// are read from the content streams with pdf-lib, following form XObjects in drawing order, as pdf.js does.
+// Figures and tables must not change, so a page is left as it is unless the spans pdf.js reports and the spans in the
+// stream match one for one; a span is used only if its text is Thai letters and marks (no digits), and the text
+// pdf.js found inside it is made of the same letters (the span only adds the lost marks). Glyph positions are kept,
+// so lines, columns and tables come out as before.
+const THAI_ONLY = /^[ก-ฺเ-๎]+$/;
+function streamText(PDFLib, stream) {
+  try { return new TextDecoder('latin1').decode(PDFLib.decodePDFRawStream(stream).decode()); } catch { return ''; }
+}
+function actualTexts(PDFLib, libDoc, pageIndex) {
+  const { PDFArray, PDFDict, PDFName, PDFRawStream } = PDFLib;
+  const out = [];
+  const read = (text, resources, depth) => {
+    const xobj = resources?.lookupMaybe(PDFName.of('XObject'), PDFDict);
+    // a Span with an inline property list, or a form drawn with Do (its text comes at that point in the order)
+    for (const m of text.matchAll(/\/Span\s*<<([\s\S]*?)>>\s*BDC|\/([^\s/[\]<>(){}%]+)\s+Do\b/g)) {
+      if (m[1] !== undefined) {
+        const a = m[1].match(/\/ActualText\s*<([0-9A-Fa-f\s]*)>/);
+        let s = null;
+        if (a) {
+          const h = a[1].replace(/\s+/g, '').replace(/^feff/i, '');
+          s = ''; for (let i = 0; i + 4 <= h.length; i += 4) s += String.fromCharCode(parseInt(h.slice(i, i + 4), 16));
+        }
+        out.push(s);
+      } else if (xobj && depth < 8) {
+        const form = xobj.lookupMaybe(PDFName.of(m[2]), PDFRawStream);
+        if (form && form.dict.get(PDFName.of('Subtype'))?.toString() === '/Form') {
+          read(streamText(PDFLib, form), form.dict.lookupMaybe(PDFName.of('Resources'), PDFDict) || resources, depth + 1);
+        }
+      }
+    }
+  };
+  const node = libDoc.getPage(pageIndex).node;
+  const c = node.Contents();
+  const streams = c instanceof PDFArray ? c.asArray().map((r) => libDoc.context.lookup(r)) : [c];
+  read(streams.filter((s) => s instanceof PDFRawStream).map((s) => streamText(PDFLib, s)).join('\n'), node.Resources(), 0);
+  return out;
+}
+// One page's text content with the ActualText put back, or null when the page has none or does not line up.
+export async function actualTextContent(page, PDFLib, libDoc) {
+  const tc = await page.getTextContent({ includeMarkedContent: true });
+  const isSpan = (it) => it.type === 'beginMarkedContentProps' && it.tag === 'Span' && it.id == null;
+  const marks = tc.items.filter(isSpan).length;
+  if (!marks) return null;
+  const values = actualTexts(PDFLib, libDoc, page.pageNumber - 1);
+  if (values.length !== marks || !values.some((v) => v)) return null;
+  const items = []; let k = 0; let depth = 0; let span = null; let used = 0;
+  const flush = () => { // span done: use its ActualText if it only adds marks to what pdf.js read
+    const inside = cleanThai(span.items.map((it) => it.str).join('')).replace(/\s+/g, '');
+    const letters = (t) => t.replace(/[ัิ-ฺ็-๎]/g, '').replace(/ำ/g, 'า');
+    const ok = span.text && THAI_ONLY.test(span.text) && span.items.length && !/[\d๐-๙]/.test(inside)
+      && letters(span.text).startsWith(letters(inside));
+    const glyphs = span.items.filter((it) => it.str.trim());
+    if (ok && glyphs.length) {
+      // one item for the cluster, as wide as its glyphs, so gaps (spaces, table columns) measure as before; pdf.js's
+      // own space items (a gap before the cluster, e.g. between two table columns) stay where they are
+      used++;
+      span.items.filter((it) => !it.str.trim()).forEach((it) => items.push(it));
+      const first = glyphs[0];
+      const right = Math.max(...glyphs.map((it) => it.transform[4] + (it.width || 0)));
+      items.push({ ...first, str: span.text, width: Math.max(first.width || 0, right - first.transform[4]) });
+    } else items.push(...span.items);
+    span = null;
+  };
+  for (const it of tc.items) {
+    if (it.type === 'beginMarkedContentProps' || it.type === 'beginMarkedContent') {
+      depth++;
+      if (isSpan(it)) { const v = values[k++]; if (!span) span = { depth, text: v, items: [] }; }
+      continue;
+    }
+    if (it.type === 'endMarkedContent') { if (span && span.depth === depth) flush(); depth--; continue; }
+    (span ? span.items : items).push(it);
+  }
+  if (span) flush();
+  return used ? { items, styles: tc.styles, actualText: used } : null;
+}
+
+// Options: onPage(n, of) progress. PDFLib (window.PDFLib, optional): pages whose Thai looks damaged are first read
+// again with their ActualText (actualTextContent), which is the exact text; ocr(page) -> text items (optional): pages
+// that are scanned or still damaged are then read by OCR; onOcr(k, of, pageNumber) reports progress.
+// Returns also repaired: the page numbers whose text came from ActualText.
+export async function pdfToBlocks(doc, { onPage = () => {}, ocr = null, onOcr = () => {}, PDFLib = null } = {}) {
   const pages = [];
   for (let n = 1; n <= doc.numPages; n++) { onPage(n, doc.numPages); pages.push(await pageLines(await doc.getPage(n))); }
   const scanned = pages.map((p, i) => (p.lines.reduce((s, l) => s + l.text.length, 0) < 10 && p.images ? i + 1 : 0)).filter(Boolean);
   const canva = await madeByCanva(doc);
-  const damaged = pages.map((p, i) => {
-    const t = p.lines.map((l) => l.text).join(' ') + p.tables.flatMap((g) => g.rows.flat(2).map((r) => r.t)).join(' ');
-    return damagedThai(t, { canva }) ? i + 1 : 0;
-  }).filter(Boolean);
+  const pageText = (p) => p.lines.map((l) => l.text).join(' ') + p.tables.flatMap((g) => g.rows.flat(2).map((r) => r.t)).join(' ');
+  let damaged = pages.map((p, i) => (damagedThai(pageText(p), { canva }) ? i + 1 : 0)).filter(Boolean);
+  // A document with damaged Thai: every page that has ActualText is read again with it (the damage check misses
+  // a page with only a few lost marks); pages still damaged after that go on to OCR.
+  const repaired = [];
+  if (PDFLib && damaged.length) {
+    try {
+      const libDoc = await PDFLib.PDFDocument.load(await doc.getData(), { ignoreEncryption: true, updateMetadata: false });
+      for (let n = 1; n <= doc.numPages; n++) {
+        if (scanned.includes(n)) continue;
+        const page = await doc.getPage(n);
+        const tc = await actualTextContent(page, PDFLib, libDoc);
+        if (tc) { pages[n - 1] = await pageLines(page, tc); repaired.push(n); }
+      }
+      damaged = pages.map((p, i) => (damagedThai(pageText(p), { canva }) ? i + 1 : 0)).filter(Boolean);
+    } catch (err) { console.warn('ActualText', err); }
+  }
   const ocred = ocr ? [...new Set([...scanned, ...damaged])].sort((a, b) => a - b) : [];
   for (const [k, n] of ocred.entries()) {
     onOcr(k + 1, ocred.length, n);
@@ -467,7 +566,7 @@ export async function pdfToBlocks(doc, { onPage = () => {}, ocr = null, onOcr = 
   blocks.forEach((b) => (b.rows ? b.rows.flat() : [b.runs]).forEach((rs) => rs.forEach((r) => { r.t = r.t.replace(LOST_AM, (w) => AM_WORDS[w]); })));
   const fam = {}; pages.forEach((p) => Object.entries(p.fonts).forEach(([k, v]) => { fam[k] = (fam[k] || 0) + v; }));
   const font = Object.entries(fam).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
-  return { blocks, pages: pages.length, scanned, damaged, ocred, font, size: body, page: { w: pages[0]?.width || 595, h: pages[0]?.height || 842 } };
+  return { blocks, pages: pages.length, scanned, damaged, ocred, repaired, font, size: body, page: { w: pages[0]?.width || 595, h: pages[0]?.height || 842 } };
 }
 
 // Runs with "\n" -> one runs list per line.
