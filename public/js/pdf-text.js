@@ -403,10 +403,18 @@ export async function actualTextContent(page, PDFLib, libDoc) {
   return used ? { items, styles: tc.styles, actualText: used } : null;
 }
 
+// Figures of two or more digits ("244,475.75", "๒๕๖๙", "21"), as Arabic digits without separators, for comparing the
+// PDF's own text with OCR; minus(a, b): a's figures that b does not have (counting repeats).
+const figuresOf = (t) => (t.match(/[\d๐-๙][\d๐-๙,]*(?:\.[\d๐-๙]+)?/g) || [])
+  .map((f) => f.replace(/[๐-๙]/g, (d) => String(d.charCodeAt(0) - 0x0E50)).replace(/,/g, '')).filter((f) => f.replace('.', '').length >= 2);
+function minus(a, b) { const left = [...b]; return a.filter((x) => { const i = left.indexOf(x); if (i < 0) return true; left.splice(i, 1); return false; }); }
+
 // Options: onPage(n, of) progress. PDFLib (window.PDFLib, optional): pages whose Thai looks damaged are first read
 // again with their ActualText (actualTextContent), which is the exact text; ocr(page) -> text items (optional): pages
 // that are scanned or still damaged are then read by OCR; onOcr(k, of, pageNumber) reports progress.
-// Returns also repaired: the page numbers whose text came from ActualText.
+// Returns also repaired: the page numbers whose text came from ActualText; figureCheck: [{ page, missing, extra }]
+// for OCR'd pages whose figures differ from the PDF's own text (missing: in the PDF, not read by OCR; extra: the
+// other way round).
 export async function pdfToBlocks(doc, { onPage = () => {}, ocr = null, onOcr = () => {}, PDFLib = null } = {}) {
   const pages = [];
   for (let n = 1; n <= doc.numPages; n++) { onPage(n, doc.numPages); pages.push(await pageLines(await doc.getPage(n))); }
@@ -430,9 +438,18 @@ export async function pdfToBlocks(doc, { onPage = () => {}, ocr = null, onOcr = 
     } catch (err) { console.warn('ActualText', err); }
   }
   const ocred = ocr ? [...new Set([...scanned, ...damaged])].sort((a, b) => a - b) : [];
+  const figureCheck = [];
   for (const [k, n] of ocred.entries()) {
     onOcr(k + 1, ocred.length, n);
+    // A damaged page (not a scan) still holds its figures correctly: only Thai marks are lost. OCR can misread a
+    // digit, so every figure in the PDF's own text that OCR did not read the same way is listed for checking.
+    const own = scanned.includes(n) ? null : figuresOf(pageText(pages[n - 1]));
     const page = await doc.getPage(n); pages[n - 1] = await pageLines(page, await ocr(page));
+    if (own) {
+      const read = figuresOf(pageText(pages[n - 1]));
+      const missing = minus(own, read); const extra = minus(read, own);
+      if (missing.length || extra.length) figureCheck.push({ page: n, missing, extra });
+    }
   }
 
   // Running headers and footers: lines in the top or bottom 9% of the page that repeat (numbers ignored) on at least
@@ -566,7 +583,7 @@ export async function pdfToBlocks(doc, { onPage = () => {}, ocr = null, onOcr = 
   blocks.forEach((b) => (b.rows ? b.rows.flat() : [b.runs]).forEach((rs) => rs.forEach((r) => { r.t = r.t.replace(LOST_AM, (w) => AM_WORDS[w]); })));
   const fam = {}; pages.forEach((p) => Object.entries(p.fonts).forEach(([k, v]) => { fam[k] = (fam[k] || 0) + v; }));
   const font = Object.entries(fam).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
-  return { blocks, pages: pages.length, scanned, damaged, ocred, repaired, font, size: body, page: { w: pages[0]?.width || 595, h: pages[0]?.height || 842 } };
+  return { blocks, pages: pages.length, scanned, damaged, ocred, repaired, figureCheck, font, size: body, page: { w: pages[0]?.width || 595, h: pages[0]?.height || 842 } };
 }
 
 // Runs with "\n" -> one runs list per line.

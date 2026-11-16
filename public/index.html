@@ -1314,6 +1314,11 @@
             const notes = [];
             if (r.repaired.length) notes.push(`Thai on page${r.repaired.length > 1 ? 's' : ''} ${range(r.repaired)} put right from the text the PDF keeps for it (exact, not OCR)`);
             if (r.ocred.length) notes.push(`page${r.ocred.length > 1 ? 's' : ''} ${range(r.ocred)} ${r.ocred.length > 1 ? 'were' : 'was'} read by OCR (${r.scanned.length ? 'scanned' : ''}${r.scanned.length && r.damaged.length ? ' or ' : ''}${r.damaged.length ? 'Thai text in the PDF damaged' : ''}): check names and figures there`);
+            if (r.figureCheck.length) { // figures OCR read differently from the PDF's own text (the PDF's are right)
+                const figs = r.figureCheck.flatMap(({ page, missing }) => missing.map((f) => `${f} p.${page}`));
+                const other = r.figureCheck.reduce((s, c) => s + c.extra.length, 0);
+                notes.push(`figures to check (in the PDF but read differently by OCR): ${figs.slice(0, 8).join(', ')}${figs.length > 8 ? ` and ${figs.length - 8} more` : ''}${other ? `; OCR also read ${other} figure${other > 1 ? 's' : ''} the PDF does not have` : ''}`);
+            }
             if (ocrFixed) notes.push(`OCR words put right from the Thai word list: ${ocrFixed}`);
             if (ocrCheck.length) notes.push(`OCR words to check: ${ocrCheck.slice(0, 8).join(', ')}${ocrCheck.length > 8 ? ` and ${ocrCheck.length - 8} more` : ''}`);
             if (!r.blocks.length) { status(`No text found in ${fileName}${notes.length ? `: ${notes.join('; ')}` : ''}.`); return; }
