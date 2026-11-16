@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": [
+          "public/index.html"
+        ],
+        "createdAt": "2026-11-16T10:37:42.067Z",
+        "reason": "CI title gradient (--title-grad on brand, section and empty-state titles), commit 0ec9a51; DESIGN.md updated; user approved"
+      },
+      {
+        "rule": "dark-glow",
+        "value": "*",
+        "files": [
+          "public/index.html"
+        ],
+        "createdAt": "2026-11-16T10:37:42.363Z",
+        "reason": "web CI logo shadow and open-tab glow, commit 199cbfb; dark mode uses neutral --logo-glow; DESIGN.md updated; user approved"
+      }
+    ]
+  }
+}

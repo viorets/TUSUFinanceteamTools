@@ -200,7 +200,7 @@ Depth comes from material, not stacked shadows: frosted glass (blur 16px, satura
 - **Focus ring** (`outline: 2px solid` Sky Accent, 2px offset): every focusable control.
 
 ### Named Rules
-**The One Light Rule.** Light comes from the top: the only highlight is the 1px rim on the top edge of glass. No glows, no coloured shadows.
+**The One Light Rule.** Light comes from the top: the only highlight is the 1px rim on the top edge of glass. No glows, no coloured shadows, with two CI exceptions taken from TUSU Finance Feedback: the logo mark's soft shadow (`0 4px 12px`, navy in light, neutral black in dark) and the open tab's `0 6px 18px var(--primary-glow)`. Nothing else glows.
 
 ## Shapes
 
@@ -249,5 +249,5 @@ Soft, consistent rounding that grows with the size of the surface: 4px for small
 - **Don't** let chart colour themes recolour the interface.
 - **Don't** tint dark mode navy: it is black, greys and white controls.
 - **Don't** use the browser's own full-screen API (Edge's scareware blocker flags it); fill the window instead.
-- **Don't** add glows, coloured shadows or gradient text; depth comes from the glass and one ambient shadow.
+- **Don't** add glows, coloured shadows or gradient text beyond the CI exceptions: gradient text (`--title-grad`) only on titles (the brand name, section titles, empty-state titles), and the two shadows in The One Light Rule. Depth comes from the glass and one ambient shadow.
 - **Don't** set inputs smaller than 16px.

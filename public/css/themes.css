@@ -39,12 +39,14 @@
   --bg: #0a0f1a; --surface: #1b2124; --surface-2: #1f2b2e; --ink: #eef2f3; --ink-2: #a3adb1;
   --primary: #0b7f8f; --primary-hover: #0e93a5; --title-grad: linear-gradient(90deg, #4cc6d9, #a6e8f0); --primary-text: #7fd8e5; --on-primary: #ffffff; --accent: #4cc6d9; --tint: rgba(76, 198, 217, .12);
   --border: rgba(140, 200, 210, .14); --border-strong: #2c4a50; --danger: #ff6b6b; --danger-tint: rgba(255, 107, 107, .14); color-scheme: dark;
+  --logo-glow: rgba(0, 0, 0, .35); /* the light-mode navy shadow does not show on the dark page */
 }
 @media (prefers-color-scheme: dark) {
   :root[data-mode="auto"] {
     --bg: #0a0f1a; --surface: #1b2124; --surface-2: #1f2b2e; --ink: #eef2f3; --ink-2: #a3adb1;
     --primary: #0b7f8f; --primary-hover: #0e93a5; --title-grad: linear-gradient(90deg, #4cc6d9, #a6e8f0); --primary-text: #7fd8e5; --on-primary: #ffffff; --accent: #4cc6d9; --tint: rgba(76, 198, 217, .12);
     --border: rgba(140, 200, 210, .14); --border-strong: #2c4a50; --danger: #ff6b6b; --danger-tint: rgba(255, 107, 107, .14); color-scheme: dark;
+    --logo-glow: rgba(0, 0, 0, .35);
   }
 }
 
